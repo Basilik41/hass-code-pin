@@ -30,6 +30,7 @@ from .const import (
     CONF_ALIASES,
     CONF_EXEMPT,
     CONF_LABEL,
+    CONF_LINK_USERS,
     CONF_MODE,
     CONF_NOTIFY,
     CONF_PEER_TOKEN,
@@ -37,6 +38,7 @@ from .const import (
     CONF_TABLET,
     DEFAULT_LABEL,
     DEFAULT_LABEL_NAME,
+    DEFAULT_LINK_NAME,
     DEFAULT_NOTIFY,
     DEFAULT_TABLET,
     DEVICE_LOCK,
@@ -116,6 +118,8 @@ class CodePin:
         self.mode: str = o.get(CONF_MODE) or MODE_OBSERVATION
         self.tablet_motif: str = o.get(CONF_TABLET) or DEFAULT_TABLET
         self.exempt: set[str] = set(o.get(CONF_EXEMPT) or [])
+        self._link_opt: list[str] | None = o.get(CONF_LINK_USERS)
+        self.link_users: set[str] = set(self._link_opt or [])
         self.notify: str = o.get(CONF_NOTIFY, DEFAULT_NOTIFY) or ""
         self.aliases = {slug(k.removeprefix("person.")): slug(v) for k, v in parse_pairs(o.get(CONF_ALIASES)).items()}
         self.alarm_codes = parse_pairs(o.get(CONF_ALARM_CODES))
@@ -147,6 +151,9 @@ class CodePin:
         self.peer_users = set(data.get("comptes_pairs") or [])
         self.journal = list((await self._journal_store.async_load() or {}).get("entrees") or [])
         self.instance_id = await async_get_instance_id(self.hass)
+        if self._link_opt is None:  # jamais réglé : comptes « Liaison » (jetons de Remote Home Assistant)
+            self.link_users = {u.id for u in await self.hass.auth.async_get_users()
+                               if not u.system_generated and DEFAULT_LINK_NAME in (u.name or "").lower()}
         self._ensure_label()
         self._refresh_protected()
         self._unsubs += [
@@ -563,7 +570,8 @@ class CodePin:
                 if r.status == 404:
                     raise CodeError("pair_absent", "Module absent sur l'autre Home Assistant.")
                 if r.status in (401, 403):
-                    raise CodeError("pair_droits", "Le jeton de liaison n'est pas celui d'un administrateur.")
+                    raise CodeError("pair_droits", "Compte de liaison refusé par l'autre Home Assistant (le cocher "
+                                                   "dans « Comptes de liaison » de ses options Codes d'accès).")
                 body = await r.json(content_type=None)
                 if r.status >= 400:
                     raise CodeError((body or {}).get("code", "pair_erreur"),
@@ -600,6 +608,9 @@ class CodePin:
         await self._run(eid, acts[action].service, who)
         self._log(eid, acts[action].label, who, "ok", name=name)
         return {"ok": True, "site": self.hass.config.location_name}
+
+    def peer_allowed(self, user: User) -> bool:
+        return user.is_admin or user.id in self.link_users
 
     def _learn_peer(self, user: User) -> None:
         if user.id not in self.peer_users:

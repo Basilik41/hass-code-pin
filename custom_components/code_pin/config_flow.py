@@ -22,11 +22,13 @@ from .const import (
     CONF_ALIASES,
     CONF_EXEMPT,
     CONF_LABEL,
+    CONF_LINK_USERS,
     CONF_MODE,
     CONF_NOTIFY,
     CONF_PEER_TOKEN,
     CONF_PEER_URL,
     CONF_TABLET,
+    DEFAULT_LINK_NAME,
     DEFAULT_NOTIFY,
     DEFAULT_TABLET,
     DOMAIN,
@@ -82,6 +84,9 @@ class CodePinOptions(OptionsFlow):
             vol.Required(CONF_TABLET, default=o.get(CONF_TABLET, DEFAULT_TABLET)): TextSelector(),
             vol.Optional(CONF_EXEMPT, default=list(o.get(CONF_EXEMPT) or [])): SelectSelector(SelectSelectorConfig(
                 options=user_opts, multiple=True, mode=SelectSelectorMode.DROPDOWN)),
+            vol.Optional(CONF_LINK_USERS, default=list(o[CONF_LINK_USERS]) if CONF_LINK_USERS in o else [
+                u.id for u in users if DEFAULT_LINK_NAME in (u.name or "").lower()]): SelectSelector(
+                SelectSelectorConfig(options=user_opts, multiple=True, mode=SelectSelectorMode.DROPDOWN)),
             vol.Optional(CONF_NOTIFY, description=sv(CONF_NOTIFY)): TextSelector(),
             vol.Optional(CONF_ALIASES, description=sv(CONF_ALIASES)): TextSelector(TextSelectorConfig(multiline=True)),
             vol.Optional(CONF_ALARM_CODES, description=sv(CONF_ALARM_CODES)): TextSelector(

@@ -437,6 +437,34 @@ async def main():
                       any(e["resultat"] == "commande_directe" and e["personne"] == "Julie" for e in jb["entrees"]),
                       jb["entrees"][:3])
 
+                # ── compte de liaison non administrateur (comme le compte « Liaison » réel) ──
+                lid = await ensure_user(wa, "Liaison", "liaison", "motdepasse-liaison")
+                ea = (await call(wa, {"type": "config_entries/get", "domain": "code_pin"}))[0]["entry_id"]
+                await set_options(s, A, ta, ea, comptes_liaison=[lid])
+                lt = await login(s, A, "liaison", "motdepasse-liaison")
+                async with WS(s, A, lt) as wl:
+                    llat_l = await call(wl, {"type": "auth/long_lived_access_token", "client_name": f"l{time.time()}",
+                                             "lifespan": 30})
+                async with s.post(f"{A}/api/code_pin/sync", json={"personnes": {}},
+                                  headers={"Authorization": f"Bearer {julie_a}"}) as rr:
+                    check("API de synchro refusée à un compte ordinaire", rr.status == 403, rr.status)
+                async with s.post(f"{A}/api/code_pin/executer", json={"entity_id": PORTE, "action": "ouvrir"},
+                                  headers={"Authorization": f"Bearer {julie_a}"}) as rr:
+                    check("API d'exécution refusée à un compte ordinaire", rr.status == 403, rr.status)
+                await set_options(s, B, tb, eb, pair_url="http://127.0.0.1:8123", pair_jeton=llat_l)
+                st = (await call(wb, {"type": "code_pin/synchroniser"}))["synchro"]
+                check("B → A avec le compte « Liaison » (non administrateur)", any(v["ok"] for v in st.values()), st)
+                async with WS(s, B, julie_b) as wjb2:
+                    r = await call(wjb2, {"type": "code_pin/executer", "entity_id": M_PORTE, "action": "ouvrir",
+                                          "code": "5938"})
+                await asyncio.sleep(3)
+                check("B : porte de A ouverte par le compte « Liaison »", r["ok"] and await state(s, A, ta, PORTE)
+                      == "open", r)
+                async with WS(s, B, julie_b) as wjb2:
+                    await call(wjb2, {"type": "code_pin/executer", "entity_id": M_PORTE, "action": "fermer"})
+                await asyncio.sleep(3)
+                await notes(wev)
+
                 # ── effacement propagé ──
                 r = await call(wa, {"type": "code_pin/effacer", "personne": "val", "code_admin": "86420"})
                 await call(wb, {"type": "code_pin/synchroniser"})  # A n'a pas de liaison vers B sur le banc

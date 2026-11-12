@@ -2,7 +2,7 @@
  * Actions protégées par un code personnel ; sur une tablette murale on choisit sa personne puis on tape son code.
  * Options : entities (liste), title, mon_code (true), gestion (false, administrateurs), journal (false, administrateurs).
  */
-const VERSION = "1.0.0";
+const VERSION = "1.0.1";
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const IDLE_MS = 30000;
 

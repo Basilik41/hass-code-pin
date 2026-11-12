@@ -1,4 +1,4 @@
-"""Points d'accès pour l'autre Home Assistant (jeton d'un administrateur, comme Remote Home Assistant)."""
+"""Points d'accès pour l'autre Home Assistant : jeton d'un administrateur ou d'un compte de liaison autorisé."""
 from __future__ import annotations
 
 from http import HTTPStatus
@@ -35,12 +35,12 @@ class _Base(HomeAssistantView):
 
     async def _body(self, request: web.Request, schema: vol.Schema):
         user = request[KEY_HASS_USER]
-        if not user.is_admin:
-            return None, self.json({"code": "droits", "message": "Jeton d'administrateur requis"},
-                                   HTTPStatus.FORBIDDEN)
         m = _mgr(request)
         if m is None:
             return None, self.json({"code": "absent", "message": "Module non configuré"}, HTTPStatus.NOT_FOUND)
+        if not m.peer_allowed(user):
+            return None, self.json({"code": "droits", "message": "Compte de liaison ou administrateur requis"},
+                                   HTTPStatus.FORBIDDEN)
         try:
             data = schema(await request.json())
         except (ValueError, vol.Invalid) as err:

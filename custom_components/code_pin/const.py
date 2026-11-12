@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 DOMAIN = "code_pin"
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 
 CARD_URL = f"/{DOMAIN}/code-pin-card.js"
 STORE_CODES = f"{DOMAIN}.codes"
@@ -14,6 +14,8 @@ CONF_LABEL = "label"                    # étiquette des entités protégées
 CONF_MODE = "mode"                      # observation | blocage
 CONF_TABLET = "motif_tablette"          # texte contenu dans le nom des comptes des tablettes murales
 CONF_EXEMPT = "comptes_exemptes"        # comptes jamais contrôlés (ex. intégration vocale)
+CONF_LINK_USERS = "comptes_liaison"     # comptes autorisés à synchroniser / commander depuis l'autre HA
+DEFAULT_LINK_NAME = "liaison"           # par défaut : comptes dont le nom contient « liaison »
 CONF_NOTIFY = "notifier"                # action de notification des administrateurs
 CONF_ALIASES = "alias_personnes"        # « basilik=richard » : même personne sur l'autre Home Assistant
 CONF_PEER_URL = "pair_url"              # autre Home Assistant (sinon : liaisons Remote Home Assistant)

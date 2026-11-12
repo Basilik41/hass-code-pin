@@ -27,9 +27,9 @@ journal: false      # administrateurs : 30 derniers jours
 
 - Home Assistant n'a pas de droits par entité : une commande directe ne peut pas être empêchée, seulement annulée aussitôt (≈ 2 s) et signalée.
 - Une automatisation lancée à la main (`automation.trigger`) et les commandes HomeKit / Matter (sans compte) ne sont pas contrôlées. Pour empêcher qu'on désactive une automatisation de sécurité, lui mettre l'étiquette.
-- Le compte du jeton de liaison entre les deux Home Assistant est vu comme « (ou via l'autre Home Assistant) » : lui préférer un compte dédié.
+- Le compte du jeton de liaison (« Liaison ») est accepté pour la synchronisation sans être administrateur (option « Comptes de liaison ») ; ses commandes directes sont signalées « (ou via l'autre Home Assistant) ».
 - Les codes de 4 chiffres résistent mal à un attaquant ayant accès aux fichiers ou aux sauvegardes : préférer 6 chiffres.
 
 ## Tests
 
-`tests/test_pin.py` (fonctions pures), `tests/bench_code_pin.py` (73 contrôles sur deux Home Assistant réels reliés par Remote Home Assistant), `tests/card_test.py` (32 contrôles dans Chromium : tablette, téléphone, administrateur).
+`tests/test_pin.py` (fonctions pures), `tests/bench_code_pin.py` (77 contrôles sur deux Home Assistant réels reliés par Remote Home Assistant), `tests/card_test.py` (32 contrôles dans Chromium : tablette, téléphone, administrateur).
