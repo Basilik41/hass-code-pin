@@ -1,0 +1,47 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Codes d'accès",
+        "description": "Adds a personal PIN to sensitive actions (doors, alarms, monitoring, camera detections). Starts in observation mode. Protected entities carry the label « Protégé par code »."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Déjà installé."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Codes d'accès",
+        "description": "Les codes sont personnels et stockés chiffrés. Ils sont partagés automatiquement avec l'autre Home Assistant relié par Remote Home Assistant (ou celui indiqué plus bas).",
+        "data": {
+          "mode": "Mode",
+          "label": "Étiquette des entités protégées",
+          "motif_tablette": "Comptes des tablettes murales : leur nom contient",
+          "comptes_exemptes": "Comptes jamais contrôlés",
+          "notifier": "Action d'alerte des administrateurs",
+          "alias_personnes": "Même personne sur l'autre Home Assistant",
+          "codes_alarme": "Codes des centrales d'alarme",
+          "pair_url": "Autre Home Assistant : adresse",
+          "pair_jeton": "Autre Home Assistant : jeton d'un administrateur"
+        },
+        "data_description": {
+          "mode": "Observation : on prévient seulement. Blocage : une commande faite sans code sur une entité protégée est annulée (porte refermée, interrupteur remis…) et signalée.",
+          "label": "Vide = « Protégé par code ».",
+          "motif_tablette": "Sur ces comptes, on choisit d'abord sa personne puis on tape son code (ex. « TabDomo » pour « TabDomo Salon »).",
+          "comptes_exemptes": "Ex. compte d'une intégration vocale. Les automatisations ne sont jamais contrôlées.",
+          "notifier": "Ex. script.notifier (niveau admin) ou notify.mobile_app_xxx. Vide : notification dans Home Assistant.",
+          "alias_personnes": "Une ligne par personne : personne_ici=personne_la_bas, ex. basilik=richard. Sans ligne, le nom de l'entité personne est utilisé.",
+          "codes_alarme": "Une ligne par centrale qui demande un code : alarm_control_panel.xxx=1234. Visible des administrateurs.",
+          "pair_url": "Vide : liaisons Remote Home Assistant utilisées automatiquement. Ex. http://10.10.1.108:8123",
+          "pair_jeton": "Jeton longue durée d'un compte administrateur de l'autre Home Assistant."
+        }
+      }
+    },
+    "error": {
+      "url": "Adresse attendue du type http://…:8123",
+      "pair_incomplet": "Indiquer l'adresse et le jeton, ou aucun des deux."
+    }
+  }
+}
