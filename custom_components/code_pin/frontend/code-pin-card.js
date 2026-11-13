@@ -2,9 +2,29 @@
  * Actions protégées par un code personnel ; sur une tablette murale on choisit sa personne puis on tape son code.
  * Options : entities (liste), title, mon_code (true), gestion (false, administrateurs), journal (false, administrateurs).
  */
-const VERSION = "1.0.1";
+const VERSION = "1.0.2";
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const IDLE_MS = 30000;
+
+// État lisible d'un coup d'œil : famille de couleur selon le domaine et l'état.
+const ETAT_CLASSE = (st) => {
+  const d = st.entity_id.split(".")[0], v = st.state;
+  if (v === "unavailable" || v === "unknown") return "indispo";
+  if (d === "cover" || d === "valve") return ["open", "opening"].includes(v) ? "ouvert" : v === "closing" ? "ouvert" : "ferme";
+  if (d === "lock") return ["unlocked", "open", "opening", "unlocking", "jammed"].includes(v) ? "ouvert" : "ferme";
+  if (d === "alarm_control_panel") return v === "triggered" ? "alerte" : v.startsWith("armed") || v === "arming" ? "arme" : "desarme";
+  if (d === "binary_sensor") return v === "on" ? "ouvert" : "ferme";
+  return v === "on" ? "actif" : "inactif";
+};
+const DEPUIS = (iso) => {
+  const t = Date.parse(iso || "");
+  if (!t) return "";
+  const s = Math.max(0, (Date.now() - t) / 1000);
+  if (s < 60) return "à l'instant";
+  if (s < 3600) return `depuis ${Math.round(s / 60)} min`;
+  if (s < 86400) return `depuis ${Math.floor(s / 3600)} h ${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}`;
+  return `depuis le ${new Date(t).toLocaleDateString([], { day: "2-digit", month: "2-digit" })}`;
+};
 
 const CSS = `
 :host { display:block; }
@@ -16,6 +36,18 @@ ha-card { padding: 12px 16px 16px; }
 .nom { flex:1 1 140px; min-width:0; }
 .nom b { font-weight:500; display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .nom small { color: var(--secondary-text-color); }
+.ico { flex:0 0 40px; width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+  --c: var(--disabled-color, #9e9e9e); color: var(--c); background: color-mix(in srgb, var(--c) 18%, transparent); }
+.etat { display:inline-block; font-weight:600; font-size:.95em; color: var(--c); margin-top:2px; }
+.depuis { color: var(--secondary-text-color); font-size:.82em; margin-left:6px; }
+.c-ouvert { --c: var(--state-cover-open-color, var(--warning-color, #e69500)); }
+.c-ferme { --c: var(--success-color, #2e7d32); }
+.c-arme { --c: var(--success-color, #2e7d32); }
+.c-desarme { --c: var(--secondary-text-color, #757575); }
+.c-alerte { --c: var(--error-color, #c62828); }
+.c-actif { --c: var(--primary-color, #03a9f4); }
+.c-inactif { --c: var(--secondary-text-color, #757575); }
+.c-indispo { --c: var(--error-color, #c62828); }
 .btns { display:flex; gap:6px; flex-wrap:wrap; }
 button.b { font: inherit; font-size:.9em; border:1px solid var(--divider-color); background: var(--card-background-color); color: var(--primary-text-color);
   border-radius: 18px; padding: 6px 12px; cursor:pointer; min-height:36px; }
@@ -277,6 +309,10 @@ class CodePinCard extends HTMLElement {
     if (this._msg) html += `<div class="toast ${this._msg.kind}" role="status">${esc(this._msg.text)}</div>`;
     html += `</ha-card>`;
     R.innerHTML = html;
+    R.querySelectorAll("ha-state-icon[data-ent]").forEach((el) => {
+      const st = h?.states[el.dataset.ent];
+      if (st) { el.hass = h; el.stateObj = st; }
+    });
     R.querySelectorAll("[data-act]").forEach((b) => b.addEventListener("click", () => {
       this._lastBtn = b; this._startAction(b.dataset.ent, b.dataset.act);
     }));
@@ -291,12 +327,15 @@ class CodePinCard extends HTMLElement {
       const name = c.name || st?.attributes?.friendly_name || c.entity;
       if (!st) return `<div class="ligne"><div class="nom"><b>${esc(name)}</b><small class="err">introuvable</small></div></div>`;
       const etat = h.formatEntityState ? h.formatEntityState(st) : st.state;
+      const cls = `c-${ETAT_CLASSE(st)}`;
+      const ico = `<div class="ico ${cls}" aria-hidden="true"><ha-state-icon data-ent="${esc(c.entity)}"></ha-state-icon></div>`;
+      const etatHtml = `<span class="etat ${cls}">${esc(etat)}</span><span class="depuis">${esc(DEPUIS(st.last_changed))}</span>`;
       if (!d?.protege) {
-        return `<div class="ligne"><div class="nom"><b>${esc(name)}</b><small class="warn">${info.moi.admin ? "non protégé : ajouter l'étiquette « Protégé par code »" : "non protégé"}</small></div></div>`;
+        return `<div class="ligne">${ico}<div class="nom"><b>${esc(name)}</b>${etatHtml}<br><small class="warn">${info.moi.admin ? "non protégé : ajouter l'étiquette « Protégé par code »" : "non protégé"}</small></div></div>`;
       }
       const btns = d.actions.map((a) => `<button class="b ${a.code ? "p" : ""}" data-ent="${esc(c.entity)}" data-act="${esc(a.cle)}"
           aria-label="${esc(a.libelle)} ${esc(name)}${a.code ? " (code demandé)" : ""}">${a.code ? "🔒 " : ""}${esc(a.libelle)}</button>`).join("");
-      return `<div class="ligne"><div class="nom"><b>${esc(name)}</b><small>${esc(etat)}${d.distant ? " · via l'autre maison" : ""}</small></div><div class="btns">${btns}</div></div>`;
+      return `<div class="ligne">${ico}<div class="nom"><b>${esc(name)}</b>${etatHtml}${d.distant ? `<br><small>via l'autre maison</small>` : ""}</div><div class="btns">${btns}</div></div>`;
     }).join("");
     return `<div>${rows}</div>`;
   }
