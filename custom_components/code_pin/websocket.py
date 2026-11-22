@@ -10,7 +10,7 @@ from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import config_validation as cv
 
-from .const import DOMAIN, PIN_MAX, PIN_MIN, VERSION
+from .const import DOMAIN, PIN_MAX, PIN_MIN, VERSION, VISITOR_KEY
 from .manager import CodeError, CodePin
 from .pin import has_code
 
@@ -69,7 +69,10 @@ async def ws_info(hass: HomeAssistant, conn: websocket_api.ActiveConnection, msg
         "moi": {"type": who.kind, "cle": who.key, "nom": who.name, "appareil": who.device, "admin": admin,
                 "a_un_code": has_code(m.codes.get(who.key or ""))},
         # sur une tablette, on ne montre que les personnes qui ont un code
-        "personnes": [p for p in persons if p["a_un_code"] or who.kind != "tablette"],
+        "personnes": [p for p in persons if p["a_un_code"] or who.kind != "tablette"] + (
+            [{"cle": VISITOR_KEY, "nom": "Visiteur", "photo": None, "entity_id": None, "a_un_code": True,
+              "bloque": int(m.locked_for(VISITOR_KEY)), "moi": False, "visiteur": True}]
+            if who.kind == "tablette" and m.visitor_codes() else []),
         "entites": {e: m.describe(e) for e in msg["entites"]},
     }
     if admin:

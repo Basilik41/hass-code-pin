@@ -189,7 +189,7 @@ class CodePinModal {
       const ppl = info.personnes.filter((p) => p.a_un_code);
       body = ppl.length ? `<div class="pers">${ppl.map((p) => `
           <button data-p="${esc(p.cle)}" aria-label="${esc(p.nom)}">
-            <div class="av">${p.photo ? `<img src="${esc(p.photo)}" alt="">` : esc((p.nom || "?").slice(0, 1).toUpperCase())}</div>
+            <div class="av">${p.visiteur ? "🔑" : p.photo ? `<img src="${esc(p.photo)}" alt="">` : esc((p.nom || "?").slice(0, 1).toUpperCase())}</div>
             ${esc(p.nom)}${p.bloque ? `<div class="msg e">bloqué</div>` : ""}
           </button>`).join("")}</div>`
         : `<p class="msg e">Personne n'a encore de code. Chacun le définit depuis son propre téléphone (« Mon code »).</p>`;
@@ -382,7 +382,7 @@ class CodePinCard extends HTMLElement {
   // ───────── déroulés ─────────
   _modal() { if (!this.modal) this.modal = new CodePinModal(this); return this.modal; }
 
-  _startAction(entity, act) {
+  async _startAction(entity, act) {
     const d = this.info.entites[entity];
     const a = d?.actions.find((x) => x.cle === act);
     if (!a) return;
@@ -393,6 +393,7 @@ class CodePinCard extends HTMLElement {
     if (m.type === "aucun") { this._toast("Ce compte n'est relié à aucune personne : action impossible ici.", "err"); return; }
     if (m.type === "personne" && !m.a_un_code) { this._toast("Définissez d'abord votre code (« Mon code »).", "warn"); return; }
     const tablet = m.type === "tablette";
+    if (tablet) { try { await this._load(); } catch (e) { /* liste d'avant gardée */ } } // codes visiteur à jour
     this._modal().open({ kind: "action", entity, act, title: `${a.libelle} — ${name}`, step: tablet ? "personne" : "code",
       personne: tablet ? null : m.cle });
   }

@@ -56,6 +56,8 @@ from .const import (
     STORE_JOURNAL,
     STORE_VERSION,
     SYNC_INTERVAL,
+    VISITOR_KEY,
+    VISITOR_PROVIDER,
 )
 from .pin import (
     action_needs_code,
@@ -96,6 +98,7 @@ class Who:
     device: str | None        # « Salon » pour une tablette
     user_id: str | None
     site: str | None = None   # nom de l'autre Home Assistant si l'action vient de lui
+    visite: dict | None = None  # code visiteur : la visite (accès autorisés, alarme permise)
 
     def label(self) -> str:
         parts = [p for p in (self.device and f"tablette {self.device}", self.site) if p]
@@ -253,6 +256,8 @@ class CodePin:
         if self._dev_lock.get(dev, 0) > now:
             raise CodeError("appareil_bloque", "Trop d'erreurs sur cet appareil : réessayer plus tard.",
                             secondes=int(self._dev_lock[dev] - now))
+        if who.kind == "tablette" and key == VISITOR_KEY:
+            return await self._verify_visitor(user, who, pin, dev, now)
         if who.kind == "tablette":
             p = self.person(key or "")
             if p is None:
@@ -304,6 +309,82 @@ class CodePin:
                             secondes=DEVICE_LOCK)
         raise CodeError("code_faux", "Code incorrect.", essais=MAX_FAILURES - n)
 
+    # ───────── codes visiteur (module Visiteurs) ─────────
+    def visitor_codes(self) -> list[dict]:
+        prov = self.hass.data.get(VISITOR_PROVIDER)
+        try:
+            return [c for c in (prov.codes_actifs() if prov else []) if c.get("code_h")]
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Module Visiteurs : codes illisibles")
+            return []
+
+    async def _verify_visitor(self, user: User | None, who: Who, pin: str, dev: str, now: float) -> Who:
+        """Code visiteur : seulement sur une tablette murale, seulement pendant la visite."""
+        async with self._verify_lock:
+            left = self.locked_for(VISITOR_KEY)
+            if left > 0:
+                raise CodeError("bloque", "Codes visiteur bloqués après trop d'erreurs.", secondes=int(left))
+            codes = self.visitor_codes()
+            if not codes:
+                raise CodeError("pas_de_code", "Aucun code visiteur valable en ce moment.")
+
+            def find() -> dict | None:
+                hit = None
+                for c in codes:  # tous testés : même durée quel que soit le code trouvé
+                    if check_pin(pin, c["code_h"]) and hit is None:
+                        hit = c
+                return hit
+            hit = await self.hass.async_add_executor_job(find)
+            if hit:
+                self._fail.pop(VISITOR_KEY, None)
+                self._dev_fail.pop(dev, None)
+                return Who("visiteur", f"{VISITOR_KEY}_{hit['id']}", f"{hit.get('nom') or 'Visiteur'} (visiteur)",
+                           who.device, who.user_id, visite=hit)
+            n, level = self._fail.get(VISITOR_KEY, (0, 0))
+            n, level, until = after_failure(n, level, now)
+            self._fail[VISITOR_KEY] = (n, level)
+            q = self._dev_fail.setdefault(dev, deque())
+            q.append(now)
+            while q and q[0] < now - DEVICE_WINDOW:
+                q.popleft()
+            dev_locked = len(q) >= DEVICE_MAX_FAILURES
+            if dev_locked:
+                self._dev_lock[dev] = now + DEVICE_LOCK
+                q.clear()
+            if until:
+                rec = self.codes.setdefault(VISITOR_KEY, {"nom": "Visiteurs"})
+                rec["verrou"], rec["vmaj"] = until, now
+                await self._save_codes()
+                self._sync_later()
+        vwho = Who("tablette", VISITOR_KEY, "Visiteur", who.device, who.user_id)
+        self._log(None, "vérification du code", vwho, "refuse", f"code visiteur faux ({vwho.label()})")
+        if until:
+            mins = round((until - now) / 60)
+            self._log(None, "vérification du code", vwho, "bloque", f"codes visiteur bloqués {mins} min")
+            await self._alert(f"🔒 Codes visiteur bloqués {mins} min après {MAX_FAILURES} erreurs "
+                              f"({vwho.label()}).")
+            raise CodeError("bloque", f"Bloqué {mins} min après trop d'erreurs.", secondes=int(until - now))
+        if dev_locked:
+            await self._alert(f"🔒 Appareil « {await self._user_name(user.id if user else None)} » bloqué "
+                              f"{DEVICE_LOCK // 60} min : trop de codes faux.")
+            raise CodeError("appareil_bloque", "Trop d'erreurs sur cet appareil : réessayer plus tard.",
+                            secondes=DEVICE_LOCK)
+        raise CodeError("code_faux", "Code incorrect.", essais=MAX_FAILURES - n)
+
+    def _visitor_allowed(self, who: Who, entity_id: str) -> None:
+        v = who.visite or {}
+        if entity_id not in (v.get("acces") or []):
+            raise CodeError("visiteur_acces", "Ce code visiteur n'ouvre pas cet accès.")
+        if entity_id.startswith("alarm_control_panel.") and not v.get("alarme"):
+            raise CodeError("visiteur_acces", "Ce code visiteur ne peut pas désarmer l'alarme.")
+
+    def _visitor_used(self, who: Who, action_label: str, name: str) -> None:
+        prov = self.hass.data.get(VISITOR_PROVIDER)
+        if prov is None or not who.visite or not hasattr(prov, "code_utilise"):
+            return
+        self.entry.async_create_background_task(
+            self.hass, prov.code_utilise(who.visite["id"], action_label, name), "code_pin visiteur")
+
     # ───────── actions ─────────
     def describe(self, entity_id: str) -> dict[str, Any]:
         st = self.hass.states.get(entity_id)
@@ -329,6 +410,13 @@ class CodePin:
         who = self.identify(user)
         if action_needs_code(domain, action, st.state if st else None):
             who = await self.verify(user, who, key, pin or "")
+            if who.kind == "visiteur":
+                try:
+                    self._visitor_allowed(who, entity_id)
+                except CodeError as err:
+                    self._log(entity_id, acts[action].label, who, "refuse", err.message,
+                              name=(st.name if st else None) or entity_id)
+                    raise
         elif who.kind == "aucun" and user is not None:
             raise CodeError("compte", "Ce compte n'est relié à aucune personne : action impossible ici.")
         elif who.kind == "tablette":
@@ -342,9 +430,11 @@ class CodePin:
                 raise
             self._log(entity_id, acts[action].label, who, "ok", f"via {res.get('site') or 'l’autre Home Assistant'}",
                       name=name)
+            self._visitor_used(who, acts[action].label, name)
             return {"ok": True, "qui": who.label()}
         await self._run(entity_id, acts[action].service, who)
         self._log(entity_id, acts[action].label, who, "ok", name=name)
+        self._visitor_used(who, acts[action].label, name)
         return {"ok": True, "qui": who.label()}
 
     async def _run(self, entity_id: str, service: str, who: Who, extra: dict | None = None) -> None:

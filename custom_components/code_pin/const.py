@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 DOMAIN = "code_pin"
-VERSION = "1.0.1"
+VERSION = "1.1.0"
 
 CARD_URL = f"/{DOMAIN}/code-pin-card.js"
 STORE_CODES = f"{DOMAIN}.codes"
@@ -48,5 +48,9 @@ SYNC_INTERVAL = 300
 REVERT_DELAY = 2.0               # annulation d'une commande non autorisée (mode blocage)
 
 EVENT_ACTION = f"{DOMAIN}_action"
+
+# codes visiteur : fournis par le module « Visiteurs » (hass.data[VISITOR_PROVIDER].codes_actifs())
+VISITOR_PROVIDER = "code_pin_visiteurs"
+VISITOR_KEY = "visiteur"
 API_SYNC = "/api/code_pin/sync"
 API_EXEC = "/api/code_pin/executer"
